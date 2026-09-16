@@ -4,39 +4,20 @@
 
 [![Status](https://img.shields.io/badge/status-complete-brightgreen)]()
 [![Type](https://img.shields.io/badge/type-data%20pipeline-blue)]()
-[![Industry](https://img.shields.io/badge/industry-insurance-informational)]()
-[![Tool](https://img.shields.io/badge/tool-Python%20&#124;%20AWS%20&#124;%20Power%20BI-orange)]()
+[![Industry](https://img.shields.io/badge/industry-support-informational)]()
+[![Tool](https://img.shields.io/badge/tool-MySQL%20&#124;%20Python%20&#124;%20AWS%20&#124;%20Power%20BI-orange)]()
 
 ---
 
-## 📌 TL;DR
+## 📖 Background & Overview
 
 CarePlus is a fictional healthcare-support company that generates two very different flavors of raw data every day: **unstructured application logs** (`.log`) and **structured support tickets** (MySQL → `.csv`). This project builds a **fully serverless, event-triggered pipeline on AWS** that ingests both, cleans and standardizes them independently, lands them as **Parquet** in a data lake, makes them queryable via **Athena** for ad-hoc analysis, and loads them into **Amazon Redshift Serverless** for BI consumption through a **Power BI** dashboard.
 
 **Highlights:**
-- 🔁 Two independent ingestion → transformation pipelines (logs vs. tickets), unified at the warehouse layer
-- ⚡ Fully automated with **S3 event triggers → Lambda / Glue**, no manual re-runs needed after the initial backfill
-- 🧹 Real data-quality engineering: regex log parsing, typo standardization, sentinel-value handling, dedup, type casting
-- 📊 Two consumption paths: **Athena** for ad-hoc SQL and **Redshift + Power BI** for a persistent dashboard
-- 📦 ~2,650 backend log events and ~800+ ticket records processed across a 31-day synthetic dataset
-
----
-
-## 📖 Table of Contents
-
-- [Business Context](#-business-context)
-- [Architecture](#-architecture)
-- [Tech Stack](#-tech-stack)
-- [Data Model](#-data-model)
-- [Pipeline Walkthrough](#-pipeline-walkthrough)
-- [Data Quality: What Was Actually Wrong With the Data](#-data-quality-what-was-actually-wrong-with-the-data)
-- [Sample Analytics Queries](#-sample-analytics-queries)
-- [Dashboard](#-dashboard)
-- [Repository Structure](#-repository-structure)
-- [How to Reproduce This Project](#-how-to-reproduce-this-project)
-- [Security Notes](#-security-notes)
-- [Future Improvements](#-future-improvements)
-- [Acknowledgments](#-acknowledgments)
+- Two independent ingestion → transformation pipelines (logs vs. tickets), unified at the warehouse layer
+- Fully automated with **S3 event triggers → Lambda / Glue**, no manual re-runs needed after the initial backfill
+- Real data-quality engineering: regex log parsing, typo standardization, sentinel-value handling, dedup, type casting
+- Two consumption paths: **Athena** for ad-hoc SQL and **Redshift + Power BI** for a persistent dashboard
 
 ---
 
@@ -49,22 +30,22 @@ CarePlus's customer support org produces two related but disconnected data strea
 | **Support Tickets** | Customer-reported issues: priority, agent, status, channel, resolution time | Relational rows | MySQL (`careplus_support_db`) |
 | **Support Logs** | Backend telemetry for every ticket interaction: response time, CPU load, errors, session/user-agent info | Semi-structured text | Flat `.log` files |
 
-The two datasets share a `ticket_id` in a **one-to-many** relationship (one ticket → many backend log events), but they live in different systems, in different formats, on different schedules. The goal of this project was to build a pipeline that unifies them into a single warehouse so support-ops and engineering can answer questions like *"which channel generates the most tickets?"* or *"is high CPU load correlated with slower response times?"* from one dashboard.
+The two datasets share a `ticket_id` in a **one-to-many** relationship (one ticket → many backend log events), but they live in different systems, in different formats, on different schedules. The goal of this project was to build a pipeline that unifies them into a single warehouse so support-ops and engineering can access and draw insights from the data.
 
 ---
 
 ## 🏗 Architecture
 
-![Pipeline Architecture](pipeline_diagram.jpg)
+<img width="703" height="434" alt="image" src="https://github.com/user-attachments/assets/7482db6f-7873-451c-8e4a-3ab0ee2d4f50" />
 
 **Flow summary:**
-1. **Ingestion** — Python scripts pull daily `.log` files and query MySQL for the previous day's tickets, then push both to an S3 **raw** zone.
-2. **Transformation (event-driven)** — an S3 `PUT` event on the raw prefix fires a Lambda:
+1. **Ingestion** - Python scripts pull daily `.log` files and query MySQL for the previous day's tickets, then push both to an S3 **raw** zone.
+2. **Transformation (event-driven)** - an S3 `PUT` event on the raw prefix fires a Lambda:
    - **Logs** → AWS **Lambda** parses the log grammar with regex, cleans it, and writes **Parquet** to the **processed** zone.
    - **Tickets** → Lambda triggers an AWS **Glue** job that cleans the CSV and writes **Parquet** to the **processed** zone.
-3. **Ad-hoc analysis** — **Amazon Athena** queries the processed Parquet directly for exploratory SQL, no warehouse load required.
-4. **Warehousing** — a second S3 event trigger fires a Lambda that runs a Redshift `COPY` command, incrementally loading new Parquet files into **Amazon Redshift Serverless**.
-5. **Visualization** — **Power BI** connects to Redshift and refreshes the *CarePlus Insights* dashboard.
+3. **Ad-hoc analysis** - **Amazon Athena** queries the processed Parquet directly for exploratory SQL, no warehouse load required.
+4. **Warehousing** - a second S3 event trigger fires a Lambda that runs a Redshift `COPY` command, incrementally loading new Parquet files into **Amazon Redshift Serverless**.
+5. **Visualization** - **Power BI** connects to Redshift and refreshes the *CarePlus Insights* dashboard.
 
 ---
 
@@ -259,25 +240,3 @@ project-care-plus/
 - For a production version of this pipeline, credentials should live in **AWS Secrets Manager** or **Systems Manager Parameter Store** rather than `.env` files, and the Redshift loader Lambda should assume an IAM role instead of using a database password directly.
 
 ---
-
-## 🚀 Future Improvements
-
-- Replace ad-hoc Lambda triggers with **Step Functions** or **Managed Airflow (MWAA)** for observable, retryable orchestration
-- Add automated data-quality checks (e.g. **Great Expectations** or dbt tests) before data lands in Redshift
-- Move infrastructure definition into **Terraform/CloudFormation** for repeatable, version-controlled deployments
-- Add CI (GitHub Actions) to lint/test the Lambda and Glue scripts on every commit
-- Partition Parquet output by date to speed up Athena scans as data volume grows
-- Add a dbt layer on top of Redshift for versioned, testable transformation logic
-
----
-
-## 🙏 Acknowledgments
-
-This project was built as a hands-on, guided data engineering exercise on the AWS stack, then extended with a custom synthetic dataset, original data-cleaning logic, Athena/Redshift SQL, and a Power BI dashboard built from scratch.
-
----
-
-## 👤 Author
-
-**Your Name**
-📧 your.email@example.com · 🔗 [LinkedIn](https://linkedin.com/in/yourprofile) · 💻 [GitHub](https://github.com/yourusername)
