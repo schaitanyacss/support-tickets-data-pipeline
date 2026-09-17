@@ -45,7 +45,7 @@ The two datasets share a `ticket_id` in a **one-to-many** relationship (one tick
    - **Tickets** → Lambda triggers an AWS **Glue** job that cleans the CSV and writes **Parquet** to the **processed** zone.
 3. **Ad-hoc analysis** - **Amazon Athena** queries the processed Parquet directly for exploratory SQL, no warehouse load required.
 4. **Warehousing** - a second S3 event trigger fires a Lambda that runs a Redshift `COPY` command, incrementally loading new Parquet files into **Amazon Redshift Serverless**.
-5. **Visualization** - **Power BI** connects to Redshift and refreshes the *CarePlus Insights* dashboard.
+5. **Visualization** - **Power BI** connects to Redshift and refreshes the *CarePlus* dashboard.
 
 ---
 
@@ -96,8 +96,8 @@ The two datasets share a `ticket_id` in a **one-to-many** relationship (one tick
 ## 🔄 Pipeline Walkthrough
 
 ### 1. Ingestion (`data-ingestion/`)
-- `support_logs_ingestion_to_S3.ipynb` reads the next unprocessed day's `.log` file and uploads it to `s3://<bucket>/support-logs/raw/`, tracking progress in a local date-tracker file so re-runs pick up exactly where they left off.
-- `support_tickets_ingestion_to_S3.ipynb` queries MySQL for the previous day's tickets via `SQLAlchemy`/`pandas`, and uploads the result as CSV to `s3://<bucket>/support-tickets/raw/`.
+- `S3_support_logs_ingestion.py` reads the next unprocessed day's `.log` file and uploads it to `s3://<bucket>/support-logs/raw/`, tracking progress in a local date-tracker file so re-runs pick up exactly where they left off.
+- `S3_support_tickets_ingestion.py` queries MySQL for the previous day's tickets via `SQLAlchemy`/`pandas`, and uploads the result as CSV to `s3://<bucket>/support-tickets/raw/`.
 - Credentials are loaded from a local `.env` file (see `sample.env`) and are **never hardcoded**.
 
 ### 2. Transformation (`data-transformation/`)
@@ -106,17 +106,17 @@ The two datasets share a `ticket_id` in a **one-to-many** relationship (one tick
   - Drops the unused `trace_id` field
   - Casts `response_time` → int, `cpu` → float, `error` → boolean, `timestamp` → datetime
   - Writes the cleaned DataFrame to S3 as Parquet using `pyarrow`
-- **Tickets → Glue:** the same event pattern triggers a Lambda that calls `glue.start_job_run()` on an AWS Glue job, passing the S3 input path as a job argument. The Glue job standardizes and writes the cleaned data to `support-tickets/processed/` as Parquet.
+- **Tickets → Glue:** the same event pattern triggers a Lambda that calls `glue.start_job_run()` on an AWS Glue job, passing the S3 input path as a job argument. The Glue job standardizes and writes the cleaned data to `s3://<bucket>/support-tickets/processed/` as Parquet.
 
-### 3. Ad-hoc Analysis (`data-warehousing-analytics/athena-sql-queries/`)
+### 3. Ad-hoc Analysis (`data-warehousing/athena/`)
 - An Athena database (`careplus_db`) is created directly over the `processed/` Parquet prefixes, letting analysts run SQL against the data lake with zero infrastructure and zero cost when idle.
 
-### 4. Warehousing (`data-warehousing-analytics/redshift-setup/`)
+### 4. Warehousing (`data-warehousing/redshift/`)
 - Tables are created in Redshift Serverless matching the cleaned schema.
 - Initial load uses a `COPY ... FORMAT AS PARQUET` statement.
 - Ongoing loads are automated: a second S3 event trigger invokes a Lambda (`psycopg2`) that runs an incremental `COPY` for each newly landed Parquet file, keeping Redshift in sync with the data lake without manual intervention.
 
-### 5. Dashboard (`data-warehousing-analytics/dashboard/`)
+### 5. Dashboard (`dashboard/`)
 - Power BI connects directly to Redshift Serverless and visualizes ticket volume, channel mix, resolution status, and backend health metrics in **`CarePlus.pbix`**.
 
 ---
