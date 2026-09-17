@@ -49,31 +49,21 @@ The two datasets share a `ticket_id` in a **one-to-many** relationship (one tick
 
 ---
 
-## 🛠 Tech Stack
-
-| Layer | Service / Tool | Purpose |
-|---|---|---|
-| Ingestion | Python, `boto3`, `pandas`, `SQLAlchemy` | Pull data from MySQL / local `.log` files into S3 |
-| Storage (data lake) | Amazon S3 | `raw/` and `processed/` zones per data source |
-| Compute (logs) | AWS Lambda + `pyarrow` | Regex parsing, cleaning, Parquet conversion |
-| Compute (tickets) | AWS Glue | Batch ETL and Parquet conversion for tabular data |
-| Orchestration | S3 Event Notifications | Trigger Lambda/Glue automatically on new file arrival |
-| Ad-hoc analytics | Amazon Athena | Serverless SQL directly over S3 Parquet |
-| Warehouse | Amazon Redshift Serverless | `COPY FROM ... FORMAT AS PARQUET` incremental loads |
-| BI / Visualization | Power BI | Live dashboard connected to Redshift |
-| Config | `python-dotenv`, `.env` | Local credential management (never committed) |
-
----
-
 ## 🗃 Data Model
+
+- Fact tables - **`support_tickets`** , **`support_logs`**
+- Dimension tables - **`dim_date`** , **`dim_tickets`**
+- Measures table - **`key_measures`**
+  
+<img width="545" height="406" alt="image" src="https://github.com/user-attachments/assets/f30b19fd-20e5-44a5-878e-184a804264eb" />
 
 **`support_tickets`**
 
 | Column | Type | Notes |
 |---|---|---|
-| `ticket_id` | VARCHAR | e.g. `TCK0701011` — may repeat (see Data Quality) |
+| `ticket_id` | VARCHAR | e.g. `TCK0701011` - may repeat |
 | `created_at` | TIMESTAMP | When the ticket was logged |
-| `resolved_at` | TIMESTAMP | Nullable if not yet resolved |
+| `resolved_at` | TIMESTAMP | Null if not yet resolved |
 | `agent` | VARCHAR | Assigned support agent |
 | `priority` | VARCHAR | Low / Medium / High |
 | `issue_category` | VARCHAR | e.g. Bug Report, Login Issue, Payment Failure |
@@ -127,7 +117,7 @@ The two datasets share a `ticket_id` in a **one-to-many** relationship (one tick
 - Ongoing loads are automated: a second S3 event trigger invokes a Lambda (`psycopg2`) that runs an incremental `COPY` for each newly landed Parquet file, keeping Redshift in sync with the data lake without manual intervention.
 
 ### 5. Dashboard (`data-warehousing-analytics/dashboard/`)
-- Power BI connects directly to Redshift Serverless and visualizes ticket volume, channel mix, resolution status, and backend health metrics in **`Careplus Insights.pbix`**.
+- Power BI connects directly to Redshift Serverless and visualizes ticket volume, channel mix, resolution status, and backend health metrics in **`CarePlus.pbix`**.
 
 ---
 
@@ -174,12 +164,39 @@ More queries — ticket status breakdown, debug-level event counts, and event vo
 
 ## 📈 Dashboard
 
-The Redshift-backed Power BI dashboard (**`Careplus Insights.pbix`**) surfaces:
-- Ticket volume and resolution rate by channel, priority, and agent
-- Escalation trends over time
-- Backend health signals (response time, CPU load, error rate) tied back to ticket volume
+The Redshift-backed Power BI dashboard (**`CarePlus.pbix`**) surfaces:
+- Ticket volume by agent, channel and status
+- Ticket resolution rate by issue category and priority
+- Backend health signals (logged tickets, avg response time, log level) tied back to ticket volume
+- CPU load trend over time
 
-> 💡 *Add a screenshot or exported PDF of your dashboard here — recruiters and reviewers engage far more with a visual than a filename.*
+<img width="844" height="406" alt="image" src="https://github.com/user-attachments/assets/318e5596-23da-4cc5-9243-379b697df397" />
+
+<img width="847" height="404" alt="image" src="https://github.com/user-attachments/assets/a55ce8ec-3ec9-4ab2-a7c7-91379192fac5" />
+
+---
+
+## 🛠 Tech Stack
+
+| Layer | Service / Tool | Purpose |
+|---|---|---|
+| Ingestion | Python, `boto3`, `pandas`, `SQLAlchemy` | Pull data from MySQL / local `.log` files into S3 |
+| Storage (data lake) | Amazon S3 | `raw/` and `processed/` zones per data source |
+| Compute (logs) | AWS Lambda + `pyarrow` | Regex parsing, cleaning, Parquet conversion |
+| Compute (tickets) | AWS Glue | Batch ETL and Parquet conversion for tabular data |
+| Orchestration | S3 Event Notifications | Trigger Lambda/Glue automatically on new file arrival |
+| Ad-hoc analytics | Amazon Athena | Serverless SQL directly over S3 Parquet |
+| Warehouse | Amazon Redshift Serverless | `COPY FROM ... FORMAT AS PARQUET` incremental loads |
+| BI / Visualization | Power BI | Live dashboard connected to Redshift |
+| Config | `python-dotenv`, `.env` | Local credential management (never committed) |
+
+---
+
+## 🔒 Security Notes
+
+- All AWS/DB credentials are supplied via `.env` files (see `sample.env` templates) and loaded with `python-dotenv` — **no secrets are hardcoded in source**.
+- **Before pushing this repo publicly**, double-check every notebook for accidentally hardcoded values (connection strings, passwords, IAM role ARNs, account IDs) left over from local testing, and replace them with placeholders or environment variables. A `.gitignore` excluding `.env`, `*.pbix` data caches, and local credential files is strongly recommended.
+- For a production version of this pipeline, credentials should live in **AWS Secrets Manager** or **Systems Manager Parameter Store** rather than `.env` files, and the Redshift loader Lambda should assume an IAM role instead of using a database password directly.
 
 ---
 
@@ -213,30 +230,3 @@ project-care-plus/
 ├── pipeline_diagram.jpg   # Architecture diagram (referenced above)
 └── README.md
 ```
-
----
-
-## ⚙️ How to Reproduce This Project
-
-1. **Set up source data**
-   - Restore `careplus_support_db.sql` into a local/managed MySQL instance for the tickets source.
-   - Use the sample `.log` files (or generate your own) for the logs source.
-2. **Configure AWS resources**
-   - Create an S3 bucket with `raw/` and `processed/` prefixes for both `support-logs` and `support-tickets`.
-   - Create the Lambda functions (log parser, Glue trigger, Redshift loader) and attach S3 event notifications on the relevant prefixes.
-   - Create a Glue job for ticket cleaning and Parquet conversion.
-   - Create an Athena database over the processed prefixes.
-   - Provision Redshift Serverless and run the DDL in `table-creation-queries.txt`.
-3. **Set environment variables** — copy `sample.env` → `.env` in each ingestion folder and fill in your own AWS/MySQL credentials. **Never commit `.env` files.**
-4. **Run ingestion notebooks** to backfill historical data, then let the event triggers take over for new files.
-5. **Connect Power BI** to your Redshift Serverless endpoint and open `Careplus Insights.pbix`, or rebuild the report against your own workspace.
-
----
-
-## 🔒 Security Notes
-
-- All AWS/DB credentials are supplied via `.env` files (see `sample.env` templates) and loaded with `python-dotenv` — **no secrets are hardcoded in source**.
-- **Before pushing this repo publicly**, double-check every notebook for accidentally hardcoded values (connection strings, passwords, IAM role ARNs, account IDs) left over from local testing, and replace them with placeholders or environment variables. A `.gitignore` excluding `.env`, `*.pbix` data caches, and local credential files is strongly recommended.
-- For a production version of this pipeline, credentials should live in **AWS Secrets Manager** or **Systems Manager Parameter Store** rather than `.env` files, and the Redshift loader Lambda should assume an IAM role instead of using a database password directly.
-
----
