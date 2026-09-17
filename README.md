@@ -135,7 +135,7 @@ Issues discovered and handled during transformation:
 
 ## 📊 Sample Analytics Queries
 
-Run from `data-warehousing/athena/ad-hoc_sql_quries.txt` against the processed Parquet in Athena:
+Run from `data-warehousing/athena/ad-hoc_sql_queries.txt` against the processed Parquet in Athena:
 
 ```sql
 -- Ticket load by channel - understand user preference & staffing needs
