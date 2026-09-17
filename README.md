@@ -121,17 +121,16 @@ The two datasets share a `ticket_id` in a **one-to-many** relationship (one tick
 
 ---
 
-## 🧹 Data Quality: What Was Actually Wrong With the Data
+## 🧹 Data Quality Checks
 
-This project deliberately works with messy, realistic data rather than a clean tutorial dataset. Issues discovered and handled during transformation:
+Issues discovered and handled during transformation:
 
-- **Categorical typos** in `priority` and `log_level` — e.g. `Lw` → `Low`, `Hgh` → `High`, `Medum` → `Medium`, `INF0` → `INFO`, `DEBG` → `DEBUG`, `warnING` → `WARNING`, `EROR` → `ERROR`
-- **Sentinel/placeholder values** — `num_interactions` occasionally contains `-999999` in place of a true null, requiring explicit handling rather than naive averaging
-- **Invalid measurements** — a small number of log rows have a negative `response_time`, which is physically meaningless and filtered out
-- **Duplicate records** — both the raw ticket dump and raw logs contain exact duplicate rows that inflate counts if not deduplicated before load
-- **Mixed date formats** — `created_at` / `resolved_at` and log `timestamp` values needed explicit parsing and casting to a consistent `TIMESTAMP` type
-- **Unstructured text at scale** — the log format has no schema at all; a hand-built regex reconstructs a structured record from ~2,650 free-text entries
-
+- **Categorical typos** in `priority` and `log_level` - e.g. `Lw` → `Low`, `Hgh` → `High`, `Medum` → `Medium`, `INF0` → `INFO`, `DEBG` → `DEBUG`, `warnING` → `WARNING`, `EROR` → `ERROR`
+- **Sentinel/placeholder values** - `num_interactions` occasionally contains `-999999` in place of a true null, requiring explicit handling rather than naive averaging
+- **Invalid measurements** - a small number of log rows have a negative `response_time`, which is physically meaningless and filtered out
+- **Duplicate records** - both the raw ticket dump and raw logs contain exact duplicate rows that inflate counts if not deduplicated before load
+- **Mixed date formats** - `created_at` / `resolved_at` and log `timestamp` values needed explicit parsing and casting to a consistent `TIMESTAMP` type
+- **Unstructured text at scale** - the log format has no schema at all; a regex logic reconstructs structured records
 ---
 
 ## 📊 Sample Analytics Queries
@@ -139,13 +138,13 @@ This project deliberately works with messy, realistic data rather than a clean t
 Run from `data-warehousing-analytics/athena-sql-queries/sql-queries.txt` against the processed Parquet in Athena:
 
 ```sql
--- Ticket load by channel — understand user preference & staffing needs
+-- Ticket load by channel - understand user preference & staffing needs
 SELECT channel, COUNT(*) AS ticket_count
 FROM support_tickets_processed
 GROUP BY channel
 ORDER BY ticket_count DESC;
 
--- Average CPU usage per user agent — spot backend stress by client type
+-- Average CPU usage per user agent - spot backend stress by client type
 SELECT user_agent, AVG(cpu) AS avg_cpu_usage
 FROM support_logs_processed
 GROUP BY user_agent
@@ -158,7 +157,7 @@ GROUP BY DATE(created_at)
 ORDER BY day;
 ```
 
-More queries — ticket status breakdown, debug-level event counts, and event volume per user agent — are in the full [`sql-queries.txt`](data-warehousing-analytics/athena-sql-queries/sql-queries.txt).
+More queries - ticket status breakdown, debug-level event counts, and event volume per user agent, are in the full [`sql-queries.txt`](data-warehousing-analytics/athena-sql-queries/sql-queries.txt).
 
 ---
 
@@ -189,14 +188,6 @@ The Redshift-backed Power BI dashboard (**`CarePlus.pbix`**) surfaces:
 | Warehouse | Amazon Redshift Serverless | `COPY FROM ... FORMAT AS PARQUET` incremental loads |
 | BI / Visualization | Power BI | Live dashboard connected to Redshift |
 | Config | `python-dotenv`, `.env` | Local credential management (never committed) |
-
----
-
-## 🔒 Security Notes
-
-- All AWS/DB credentials are supplied via `.env` files (see `sample.env` templates) and loaded with `python-dotenv` — **no secrets are hardcoded in source**.
-- **Before pushing this repo publicly**, double-check every notebook for accidentally hardcoded values (connection strings, passwords, IAM role ARNs, account IDs) left over from local testing, and replace them with placeholders or environment variables. A `.gitignore` excluding `.env`, `*.pbix` data caches, and local credential files is strongly recommended.
-- For a production version of this pipeline, credentials should live in **AWS Secrets Manager** or **Systems Manager Parameter Store** rather than `.env` files, and the Redshift loader Lambda should assume an IAM role instead of using a database password directly.
 
 ---
 
