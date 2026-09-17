@@ -135,7 +135,7 @@ Issues discovered and handled during transformation:
 
 ## 📊 Sample Analytics Queries
 
-Run from `data-warehousing-analytics/athena-sql-queries/sql-queries.txt` against the processed Parquet in Athena:
+Run from `data-warehousing/athena/ad-hoc_sql_quries.txt` against the processed Parquet in Athena:
 
 ```sql
 -- Ticket load by channel - understand user preference & staffing needs
@@ -157,7 +157,7 @@ GROUP BY DATE(created_at)
 ORDER BY day;
 ```
 
-More queries - ticket status breakdown, debug-level event counts, and event volume per user agent, are in the full [`sql-queries.txt`](data-warehousing-analytics/athena-sql-queries/sql-queries.txt).
+More queries - ticket status breakdown, debug-level event counts, and event volume per user agent, are in the full [`ad-hoc_sql_queries.txt`](data-warehousing/athena/ad-hoc_sql_queries.txt).
 
 ---
 
